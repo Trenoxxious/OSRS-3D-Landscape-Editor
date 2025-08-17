@@ -718,9 +718,26 @@ public final class mudclient extends GameWindowMiddleMan
 			int deltaX = x - lastMiddleMouseX;
 			int deltaY = y - lastMiddleMouseY;
 			
-			// Convert screen delta to world movement (X correct, invert Y for natural feel)
-			ourPlayer.currentX += deltaX * 2;
-			ourPlayer.currentY -= deltaY * 2;
+			// Apply direction-specific transformations to maintain natural grab-and-drag feel
+			int finalDeltaX = deltaX;
+			int finalDeltaY = deltaY;
+			
+			// Adjust based on camera direction to maintain consistent panning feel
+			if (cameraRotation >= 240 || cameraRotation < 16) { // South
+				finalDeltaX = -deltaX;
+				finalDeltaY = -deltaY;
+			}
+			else if (cameraRotation >= 176 && cameraRotation < 208) { // East
+				finalDeltaX = deltaY;
+				finalDeltaY = deltaX;
+			}
+			else if (cameraRotation >= 48 && cameraRotation < 80) { // West
+				finalDeltaX = -deltaY;
+				finalDeltaY = -deltaX;
+			}
+			
+			ourPlayer.currentX += finalDeltaX * 2;
+			ourPlayer.currentY -= finalDeltaY * 2;
 			
 			lastMiddleMouseX = x;
 			lastMiddleMouseY = y;
