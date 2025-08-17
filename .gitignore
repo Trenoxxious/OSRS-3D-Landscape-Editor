@@ -1,9 +1,5 @@
-# Agent configuration
+# Agent configuration - local agent.md
 AGENT.md
-
-# Build artifacts
-MapEditor/groundeditor.jar
-MapEditor/MapEditor.jar
 
 # Generated files
 MapEditor/recent.cfg
