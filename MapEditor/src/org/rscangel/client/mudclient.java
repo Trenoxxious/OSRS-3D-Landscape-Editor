@@ -728,11 +728,11 @@ public final class mudclient extends GameWindowMiddleMan
 				finalDeltaY = -deltaY;
 			}
 			else if (cameraRotation >= 176 && cameraRotation < 208) { // East
-				finalDeltaX = deltaY;
+				finalDeltaX = -deltaY;
 				finalDeltaY = deltaX;
 			}
 			else if (cameraRotation >= 48 && cameraRotation < 80) { // West
-				finalDeltaX = -deltaY;
+				finalDeltaX = deltaY;
 				finalDeltaY = -deltaX;
 			}
 			
