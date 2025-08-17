@@ -9,7 +9,7 @@
 	<target name="compile">
 		<delete file="${jar}" />
 		<mkdir dir="${build}" />
-		<javac srcdir="${src}" destdir="${build}" debug="on" target="1.5">
+		<javac srcdir="${src}" destdir="${build}" debug="on" target="1.8" source="1.8">
 		  <classpath>
 			<pathelement location="${lib}/mina.jar" />
 			<pathelement location="${lib}/xpp3.jar" />
@@ -21,12 +21,24 @@
 			<pathelement path="${java.class.path}/"/>
 		  </classpath>
 		</javac>
-		<jar basedir="${build}" destfile="${jar}" />
+		<jar destfile="${jar}">
+			<fileset dir="${build}"/>
+			<zipfileset src="${lib}/mina.jar"/>
+			<zipfileset src="${lib}/xpp3.jar"/>
+			<zipfileset src="${lib}/slf4j.jar"/>
+			<zipfileset src="${lib}/xstream.jar"/>
+			<zipfileset src="${lib}/mysql-connector.jar"/>
+			<zipfileset src="${lib}/hex-string.jar"/>
+			<zipfileset src="${lib}/jmf.jar"/>
+			<manifest>
+				<attribute name="Main-Class" value="org.rscangel.client.mudclient"/>
+			</manifest>
+		</jar>
 		<delete dir="${build}" />
 	</target>
 	
 	<target name="runclient">
-		<java classname="org.darkquest.client.mudclient" fork="true">
+		<java classname="org.rscangel.client.mudclient" fork="true">
 			<jvmarg value="-Xms128m" />
 			<jvmarg value="-Xmx512m" />
 			<arg value="${settings}" />

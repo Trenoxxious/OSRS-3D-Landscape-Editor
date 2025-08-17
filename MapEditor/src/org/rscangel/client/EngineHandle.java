@@ -1806,7 +1806,7 @@ public class EngineHandle
 		try
 		{
 			tileArchive = new ZipFile( new File( Config.CLIENT_DIR
-					+ "/Landscape.rscd" ) );
+					+ "/Custom_Landscape.orsc" ) );
 		}
 		catch( Exception e )
 		{
@@ -1901,7 +1901,7 @@ public class EngineHandle
 			}
 
 			tileArchive = new ZipFile( new File( Config.CLIENT_DIR
-					+ "/Landscape.rscd" ) );
+					+ "/Custom_Landscape.orsc" ) );
 		}
 		catch( Exception e )
 		{

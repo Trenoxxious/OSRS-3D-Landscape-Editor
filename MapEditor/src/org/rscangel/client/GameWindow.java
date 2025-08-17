@@ -206,7 +206,7 @@ public class GameWindow extends Applet implements Runnable
 	{
 		mouseX = i;
 		mouseY = j + yOffset;
-		mouseDownButton = event.metaDown() ? 2 : 1;
+		mouseDownButton = event.metaDown() ? 2 : (event.modifiers & Event.ALT_MASK) != 0 ? 3 : 1;
 		lastMouseDownButton = mouseDownButton;
 		lastActionTimeout = 0;
 		handleMouseDown( mouseDownButton, i, j );
@@ -223,7 +223,7 @@ public class GameWindow extends Applet implements Runnable
 	{
 		mouseX = i;
 		mouseY = j + yOffset;
-		mouseDownButton = event.metaDown() ? 2 : 1;
+		mouseDownButton = event.metaDown() ? 2 : (event.modifiers & Event.ALT_MASK) != 0 ? 3 : 1;
 		handleMouseDrag( mouseDownButton, i, j );
 		return true;
 	}

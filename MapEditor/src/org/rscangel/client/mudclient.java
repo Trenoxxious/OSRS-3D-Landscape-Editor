@@ -116,6 +116,24 @@ public final class mudclient extends GameWindowMiddleMan
 	private int mDragStartMousePosY = 0;
 	private int mDragCurrentMousePosX = 0;
 	private int mDragCurrentMousePosY = 0;
+	
+	private boolean middleMouseDrag = false;
+	private int lastMiddleMouseX = 0;
+	private int lastMiddleMouseY = 0;
+	
+	private boolean rightMouseDrag = false;
+	private int lastRightMouseX = 0;
+	private int rightMouseDownX = 0;
+	private boolean actuallyDraggedRight = false;
+	private boolean actuallyDraggedMiddle = false;
+	
+	// Tool panel variables
+	private int activeTool = 0; // 0 = none, 1 = height tool
+	private int heightToolRadius = 3;
+	private float heightToolSoftness = 0.5f;
+	private int heightToolStrength = 5;
+	private int savedEditMode = 0; // Store edit mode when dragging
+	private long lastDragEndTime = 0; // Time when last drag ended
 
 	private SectionsConfig config = new SectionsConfig( "recent" );
 
@@ -546,51 +564,90 @@ public final class mudclient extends GameWindowMiddleMan
 	// -------------------------------------------------------------------------------------------------------------------
 	protected void handleMouseUp( int button, int x, int y )
 	{
-		if(editMode == 1)
+		System.out.println("Mouse up: button=" + button + ", x=" + x + ", y=" + y + ", editMode=" + editMode + ", activeTool=" + activeTool + ", rightMouseDrag=" + rightMouseDrag + ", middleMouseDrag=" + middleMouseDrag + ", actuallyDraggedRight=" + actuallyDraggedRight + ", actuallyDraggedMiddle=" + actuallyDraggedMiddle);
+		
+		// Handle fake button 1 events that are actually middle mouse up (Java Event bug)
+		if( button == 1 && middleMouseDrag )
 		{
-			// drawGame();
-			// calculateMousePosition();
-			//calculateMousePosition( x, y );
-			if (button == 1)
+			middleMouseDrag = false;
+			actuallyDraggedMiddle = false;
+			System.out.println("Middle mouse up disguised as button 1 - ignoring");
+			return;
+		}
+		if( button == 2 )
+		{			
+			rightMouseDrag = false;
+			
+			if( actuallyDraggedRight )
 			{
-				editElevation( sectionXPos, sectionYPos );
+				// We were dragging - don't do any height tool actions
+				actuallyDraggedRight = false;
+				System.out.println("Right drag ended - no tool action");
+				return; // Exit early to prevent any tool actions after drag
 			}
-			else if (button == 2)
+			else if (activeTool == 1)
 			{
+				// Height tool - right click lowers (only if we weren't dragging)
+				System.out.println("Height tool: lowering at " + sectionXPos + ", " + sectionYPos);
+				paintHeight(sectionXPos, sectionYPos, false);
+			}
+			else if(editMode == 1)
+			{
+				// Right-click without drag - do tile editing
 				Tile tile = getTileAtPos( sectionXPos, sectionYPos );
 				if( tile == null )
 					System.out.println( "Cannot obtain tile at coordinates: " + x + ":" + y );
 				setTileEditProperties( tile, false );
 			}
-			/*
-			if( button == 12 )
+		}
+		else if( button == 3 )
+		{
+			middleMouseDrag = false;
+			
+			if( actuallyDraggedMiddle )
 			{
-				if( mDragStart )
+				// We were dragging - don't do any tool actions ever for middle mouse
+				actuallyDraggedMiddle = false;
+				System.out.println("Middle drag ended - no tool action (middle mouse never edits terrain)");
+				return; // Exit early to prevent any tool actions
+			}
+			// Middle mouse should never edit terrain, even without dragging
+			System.out.println("Middle mouse up - ignoring (middle mouse never edits terrain)");
+			return;
+		}
+		
+		// Handle legitimate left clicks (button 1) - tool panel and terrain editing
+		if (button == 1)
+		{
+			// Tool panel clicks
+			if (x >= 10 && x <= 210 && y >= 100 && y <= 300)
+			{
+				if (y >= 130 && y <= 150)
 				{
-					// int oldPosX = ourPlayer.currentX;
-					// int oldPosY = ourPlayer.currentY;
-					
-					// ourPlayer.currentX = ourPlayer.waypointsX[0] = worldXPos;
-					// ourPlayer.currentY = ourPlayer.waypointsY[0] = worldYPos;
-					
-					calculateMousePosition( x, y );
-					
-					// ourPlayer.currentX = ourPlayer.waypointsX[0] = oldPosX;
-					// ourPlayer.currentY = ourPlayer.waypointsY[0] = oldPosY;
-					
-					dragEndPosX = worldXPos;
-					dragEndPosY = worldYPos;
-
-					if( mDragStartMousePosX == x && mDragStartMousePosY == y )
-					{
-						dragStartPosX = worldXPos;
-						dragStartPosY = worldYPos;
-					}
-					
-					mDragStart = false;
-					editElevation( worldXPos, worldYPos );
+					activeTool = (activeTool == 1) ? 0 : 1;
+					editMode = activeTool;
+					System.out.println("Height tool toggled: " + (activeTool == 1 ? "ON" : "OFF"));
 				}
-			}*/
+			}
+			// Height tool terrain editing
+			else if (activeTool == 1)
+			{
+				System.out.println("Height tool: raising at " + sectionXPos + ", " + sectionYPos);
+				paintHeight(sectionXPos, sectionYPos, true);
+			}
+			// Legacy editing
+			else if(editMode == 1)
+			{
+				editElevation( sectionXPos, sectionYPos );
+			}
+		}
+		else if(editMode == 1)
+		{
+			// Legacy editing when no tool is active
+			if (button == 1)
+			{
+				editElevation( sectionXPos, sectionYPos );
+			}
 		}
 	}
 
@@ -598,6 +655,21 @@ public final class mudclient extends GameWindowMiddleMan
 	// -------------------------------------------------------------------------------------------------------------------
 	protected final void handleMouseDown( int button, int x, int y )
 	{
+		System.out.println("Mouse down: button=" + button + ", x=" + x + ", y=" + y);
+		if( button == 2 )
+		{
+			rightMouseDrag = true;
+			lastRightMouseX = x;
+			rightMouseDownX = x; // Remember where we started
+			actuallyDraggedRight = false; // Reset - will be set to true in handleMouseDrag
+		}
+		else if( button == 3 )
+		{
+			middleMouseDrag = true;
+			lastMiddleMouseX = x;
+			lastMiddleMouseY = y;
+			actuallyDraggedMiddle = false; // Reset - will be set to true in handleMouseDrag
+		}
 
 			/*calculateMousePosition( x, y );
 			editElevation( worldXPos, worldYPos );
@@ -631,7 +703,30 @@ public final class mudclient extends GameWindowMiddleMan
 	// -------------------------------------------------------------------------------------------------------------------
 	protected final void handleMouseDrag( int button, int x, int y )
 	{
-		if( button == 1 && mDragStart )
+		if( button == 2 && rightMouseDrag )
+		{
+			int deltaX = x - lastRightMouseX;
+			
+			// Rotate camera based on horizontal mouse movement
+			cameraRotation = (cameraRotation - deltaX) & 0xff;
+			
+			lastRightMouseX = x;
+			actuallyDraggedRight = true; // Mark that we actually dragged
+		}
+		else if( button == 3 && middleMouseDrag )
+		{
+			int deltaX = x - lastMiddleMouseX;
+			int deltaY = y - lastMiddleMouseY;
+			
+			// Convert screen delta to world movement (X correct, invert Y for natural feel)
+			ourPlayer.currentX += deltaX * 2;
+			ourPlayer.currentY -= deltaY * 2;
+			
+			lastMiddleMouseX = x;
+			lastMiddleMouseY = y;
+			actuallyDraggedMiddle = true; // Mark that we actually dragged
+		}
+		else if( button == 1 && mDragStart )
 		{
 			mDragCurrentMousePosX = x;
 			mDragCurrentMousePosY = y;
@@ -859,6 +954,32 @@ public final class mudclient extends GameWindowMiddleMan
 		else if(cameraRotation >= 208 && cameraRotation < 240)
 			facing = "South-East";
 		gameGraphics.drawString("@whi@Facing:" + facing, 10, 60, 0, 0);
+		
+		// Tool panel on left side
+		gameGraphics.drawBoxEdge(10, 100, 200, 200, 0xffffff);
+		gameGraphics.drawString("@whi@Tools: " + (editMode == 1 ? "EDIT" : "VIEW"), 20, 120, 0, 0);
+		
+		// Height tool button
+		int heightToolColor = (activeTool == 1) ? 0x00ff00 : 0xffffff;
+		gameGraphics.drawBoxEdge(20, 130, 170, 20, heightToolColor);
+		gameGraphics.drawString((activeTool == 1 ? "@gre@" : "@whi@") + "Height Tool (H)", 25, 145, 0, 0);
+		
+		if (activeTool == 1)
+		{
+			gameGraphics.drawString("@whi@Radius: " + heightToolRadius + " (R/F)", 25, 160, 0, 0);
+			gameGraphics.drawString("@whi@Strength: " + heightToolStrength + " (T/G)", 25, 170, 0, 0);
+			gameGraphics.drawString("@whi@Softness: " + String.format("%.1f", heightToolSoftness) + " (Y/U)", 25, 180, 0, 0);
+			gameGraphics.drawString("@whi@L-Click: Raise", 25, 200, 0, 0);
+			gameGraphics.drawString("@whi@R-Click: Lower", 25, 210, 0, 0);
+		}
+		
+		// Helper text in top-right corner
+		int rightAlign = gameGraphics.getImageWidth() - 200;
+		gameGraphics.drawString("@whi@Controls:", rightAlign, 40, 0, 0);
+		gameGraphics.drawString("@whi@WASD - Move", rightAlign, 50, 0, 0);
+		gameGraphics.drawString("@whi@Middle+Drag - Pan", rightAlign, 60, 0, 0);
+		gameGraphics.drawString("@whi@Right+Drag - Rotate", rightAlign, 70, 0, 0);
+		gameGraphics.drawString("@whi@Arrow Keys - Zoom/Tilt", rightAlign, 80, 0, 0);
 		gameGraphics.drawImage( aGraphics936, 0, 0 );
 	}
 
@@ -1225,6 +1346,9 @@ public final class mudclient extends GameWindowMiddleMan
 			//ourPlayer.currentY -= 10; //move north
 			// for testing
 		}
+		
+		// Handle tool shortcuts
+		handleToolShortcuts();
 
 		if( actionPictureType > 0 )
 		{
@@ -1322,6 +1446,120 @@ public final class mudclient extends GameWindowMiddleMan
 		int ba = byteAngle % 255;
 		float angle = ((ba / 256f) * 360);
 		return angle;
+	}
+	
+	// Handle tool shortcuts based on key state
+	private void handleToolShortcuts()
+	{
+		if (super.keyDown == 'h' || super.keyDown == 'H')
+		{
+			activeTool = (activeTool == 1) ? 0 : 1;
+			editMode = activeTool; // Auto-manage edit mode
+			super.keyDown = 0; // Clear key to prevent repeat
+		}
+		else if (activeTool == 1)
+		{
+			if (super.keyDown == 'r' || super.keyDown == 'R')
+			{
+				heightToolRadius = Math.min(10, heightToolRadius + 1);
+				super.keyDown = 0;
+			}
+			else if (super.keyDown == 'f' || super.keyDown == 'F')
+			{
+				heightToolRadius = Math.max(1, heightToolRadius - 1);
+				super.keyDown = 0;
+			}
+			else if (super.keyDown == 't' || super.keyDown == 'T')
+			{
+				heightToolStrength = Math.min(20, heightToolStrength + 1);
+				super.keyDown = 0;
+			}
+			else if (super.keyDown == 'g' || super.keyDown == 'G')
+			{
+				heightToolStrength = Math.max(1, heightToolStrength - 1);
+				super.keyDown = 0;
+			}
+			else if (super.keyDown == 'y' || super.keyDown == 'Y')
+			{
+				heightToolSoftness = Math.min(1.0f, heightToolSoftness + 0.1f);
+				super.keyDown = 0;
+			}
+			else if (super.keyDown == 'u' || super.keyDown == 'U')
+			{
+				heightToolSoftness = Math.max(0.0f, heightToolSoftness - 0.1f);
+				super.keyDown = 0;
+			}
+		}
+	}
+
+	
+	// Height painting tool
+	private void paintHeight(int centerX, int centerY, boolean raise)
+	{
+		if (!sectionLoaded) 
+		{
+			System.out.println("Cannot paint height: section not loaded");
+			return;
+		}
+		
+		System.out.println("PAINTHEAD CALLED at " + centerX + ", " + centerY + " (raise: " + raise + ", radius: " + heightToolRadius + ", strength: " + heightToolStrength + ")");
+		Thread.dumpStack(); // Show the call stack to see what's calling this
+		
+		int strength = raise ? heightToolStrength : -heightToolStrength;
+		
+		for (int dx = -heightToolRadius; dx <= heightToolRadius; dx++)
+		{
+			for (int dy = -heightToolRadius; dy <= heightToolRadius; dy++)
+			{
+				int x = centerX + dx;
+				int y = centerY + dy;
+				
+				// Calculate distance from center for falloff
+				double distance = Math.sqrt(dx * dx + dy * dy);
+				if (distance > heightToolRadius) continue;
+				
+				// Calculate falloff factor based on softness
+				double falloff = 1.0;
+				if (heightToolSoftness > 0)
+				{
+					falloff = Math.max(0, 1.0 - (distance / heightToolRadius) * heightToolSoftness);
+				}
+				
+				Tile tile = getTileAtPos(x, y);
+				if (tile != null)
+				{
+					int currentElevation = tile.groundElevation & 0xFF; // Convert byte to unsigned int
+					int newElevation = currentElevation + (int)(strength * falloff);
+					tile.groundElevation = (byte)Math.max(0, Math.min(255, newElevation));
+					System.out.println("Tile at " + x + "," + y + ": " + currentElevation + " -> " + (tile.groundElevation & 0xFF));
+					
+					// Update the sector
+					byte sectorIndex = 0;
+					int sectorX = x, sectorY = y;
+					
+					if (x >= 48 && y < 48)
+					{
+						sectorIndex = 1;
+						sectorX -= 48;
+					}
+					else if (x < 48 && y >= 48)
+					{
+						sectorIndex = 2;
+						sectorY -= 48;
+					}
+					else if (x >= 48 && y >= 48)
+					{
+						sectorIndex = 3;
+						sectorX -= 48;
+						sectorY -= 48;
+					}
+					
+					engineHandle.sectors[sectorIndex].setTile(sectorX, sectorY, tile);
+				}
+			}
+		}
+		updateRender(true);
+		isModified = true;
 	}
 	
 	/**Move the loaded section in a cardinal direction;
