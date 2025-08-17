@@ -1,0 +1,18 @@
+# Agent configuration
+AGENT.md
+
+# Build artifacts
+MapEditor/groundeditor.jar
+MapEditor/MapEditor.jar
+
+# Generated files
+MapEditor/recent.cfg
+
+# IDE files
+.vscode/
+.idea/
+*.iml
+
+# OS files
+.DS_Store
+Thumbs.db
