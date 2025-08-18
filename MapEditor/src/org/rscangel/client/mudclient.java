@@ -128,11 +128,28 @@ public final class mudclient extends GameWindowMiddleMan
 	private boolean actuallyDraggedMiddle = false;
 	
 	// Tool panel variables
-	private int activeTool = 0; // 0 = none, 1 = height tool
+	private int activeTool = 0; // 0 = none, 1 = height tool, 2 = texture tool, 3 = overlay tool
 	private int heightToolRadius = 3;
 	private float heightToolSoftness = 0.5f;
 	private int heightToolStrength = 5;
 	private int savedEditMode = 0; // Store edit mode when dragging
+	
+	// Texture tool settings
+	private int textureToolRadius = 2;
+	private float textureToolSoftness = 0.5f;
+	private int selectedTexture = 1; // Current texture ID to paint
+	
+	// Overlay tool settings - always single tile
+	private int selectedOverlay = 0; // Current overlay type to paint
+	
+	// Current mouse position for tool previews
+	private int currentMouseX = 0;
+	private int currentMouseY = 0;
+	
+	// Rendering options
+	private boolean shadowsEnabled = true;
+	private boolean lockCameraHeight = false;
+	private int fixedCameraHeight = -200; // Fixed camera height when locked
 	private long lastDragEndTime = 0; // Time when last drag ended
 
 	private SectionsConfig config = new SectionsConfig( "recent" );
@@ -558,6 +575,8 @@ public final class mudclient extends GameWindowMiddleMan
 	protected void handleMouseMove( int button, int x, int y)
 		{
 		calculateMousePosition( x, y );
+		currentMouseX = x;
+		currentMouseY = y;
 		}
 
 	// game window mouse down handler
@@ -590,6 +609,16 @@ public final class mudclient extends GameWindowMiddleMan
 				// Height tool - right click lowers (only if we weren't dragging)
 				System.out.println("Height tool: lowering at " + sectionXPos + ", " + sectionYPos);
 				paintHeight(sectionXPos, sectionYPos, false);
+			}
+			else if (activeTool == 2)
+			{
+				// Texture tool - right click paints texture
+				paintTexture(sectionXPos, sectionYPos);
+			}
+			else if (activeTool == 3)
+			{
+				// Overlay tool - right click paints overlay
+				paintOverlay(sectionXPos, sectionYPos);
 			}
 			else if(editMode == 1)
 			{
@@ -634,6 +663,16 @@ public final class mudclient extends GameWindowMiddleMan
 			{
 				System.out.println("Height tool: raising at " + sectionXPos + ", " + sectionYPos);
 				paintHeight(sectionXPos, sectionYPos, true);
+			}
+			// Texture tool - left click paints texture
+			else if (activeTool == 2)
+			{
+				paintTexture(sectionXPos, sectionYPos);
+			}
+			// Overlay tool - left click paints overlay  
+			else if (activeTool == 3)
+			{
+				paintOverlay(sectionXPos, sectionYPos);
 			}
 			// Legacy editing
 			else if(editMode == 1)
@@ -914,10 +953,20 @@ public final class mudclient extends GameWindowMiddleMan
 
 		int l5 = lastAutoCameraRotatePlayerX + screenRotationX;
 		int i8 = lastAutoCameraRotatePlayerY + screenRotationY;
-		gameCamera.setCamera( l5, -engineHandle.getAveragedElevation( l5, i8 ),
-				i8, 912, cameraRotation * 4, 0, cameraHeight * 2 );
+		
+		// Use fixed camera height when height tool is active to prevent bobbing
+		int cameraY = (activeTool == 1) ? fixedCameraHeight : -engineHandle.getAveragedElevation( l5, i8 );
+		
+		gameCamera.setCamera( l5, cameraY, i8, 912, cameraRotation * 4, 0, cameraHeight * 2 );
 
 		gameCamera.finishCamera();
+		
+		// Draw tool preview when active
+		if (activeTool > 0 && !middleMouseDrag && !rightMouseDrag)
+		{
+			drawToolPreview();
+		}
+		
 		if( mDragStart )
 		{
 			int minX = Math.min( mDragStartMousePosX, mDragCurrentMousePosX );
@@ -976,18 +1025,40 @@ public final class mudclient extends GameWindowMiddleMan
 		gameGraphics.drawBoxEdge(10, 100, 200, 200, 0xffffff);
 		gameGraphics.drawString("@whi@Tools: " + (editMode == 1 ? "EDIT" : "VIEW"), 20, 120, 0, 0);
 		
-		// Height tool button
+		// Tool buttons
 		int heightToolColor = (activeTool == 1) ? 0x00ff00 : 0xffffff;
 		gameGraphics.drawBoxEdge(20, 130, 170, 20, heightToolColor);
 		gameGraphics.drawString((activeTool == 1 ? "@gre@" : "@whi@") + "Height Tool (H)", 25, 145, 0, 0);
 		
+		int textureToolColor = (activeTool == 2) ? 0x00ff00 : 0xffffff;
+		gameGraphics.drawBoxEdge(20, 155, 170, 20, textureToolColor);
+		gameGraphics.drawString((activeTool == 2 ? "@gre@" : "@whi@") + "Texture Tool (J)", 25, 170, 0, 0);
+		
+		int overlayToolColor = (activeTool == 3) ? 0x00ff00 : 0xffffff;
+		gameGraphics.drawBoxEdge(20, 180, 170, 20, overlayToolColor);
+		gameGraphics.drawString((activeTool == 3 ? "@gre@" : "@whi@") + "Overlay Tool (K)", 25, 195, 0, 0);
+		
+		// Tool-specific settings
 		if (activeTool == 1)
 		{
-			gameGraphics.drawString("@whi@Radius: " + heightToolRadius + " (R/F)", 25, 160, 0, 0);
-			gameGraphics.drawString("@whi@Strength: " + heightToolStrength + " (T/G)", 25, 170, 0, 0);
-			gameGraphics.drawString("@whi@Softness: " + String.format("%.1f", heightToolSoftness) + " (Y/U)", 25, 180, 0, 0);
-			gameGraphics.drawString("@whi@L-Click: Raise", 25, 200, 0, 0);
-			gameGraphics.drawString("@whi@R-Click: Lower", 25, 210, 0, 0);
+			gameGraphics.drawString("@whi@Radius: " + heightToolRadius + " ([/])", 25, 215, 0, 0);
+			gameGraphics.drawString("@whi@Strength: " + heightToolStrength + " (T/G)", 25, 225, 0, 0);
+			gameGraphics.drawString("@whi@Softness: " + String.format("%.1f", heightToolSoftness) + " (Y/U)", 25, 235, 0, 0);
+			gameGraphics.drawString("@whi@L-Click: Raise, R-Click: Lower", 25, 255, 0, 0);
+		}
+		else if (activeTool == 2)
+		{
+			gameGraphics.drawString("@whi@Radius: " + textureToolRadius + " ([/])", 25, 215, 0, 0);
+			gameGraphics.drawString("@whi@Softness: " + String.format("%.1f", textureToolSoftness) + " (Y/U)", 25, 225, 0, 0);
+			gameGraphics.drawString("@whi@Texture: " + selectedTexture + " (Q/E)", 25, 235, 0, 0);
+			gameGraphics.drawString("@whi@Click: Paint Texture", 25, 255, 0, 0);
+		}
+		else if (activeTool == 3)
+		{
+			gameGraphics.drawString("@whi@Single Tile Only", 25, 215, 0, 0);
+			gameGraphics.drawString("@whi@Overlay: " + selectedOverlay + " (Q/E)", 25, 225, 0, 0);
+			gameGraphics.drawString("@whi@0=Ground 8=Water 11=Lava", 25, 235, 0, 0);
+			gameGraphics.drawString("@whi@Click: Paint Overlay", 25, 255, 0, 0);
 		}
 		
 		// Helper text in top-right corner
@@ -997,6 +1068,7 @@ public final class mudclient extends GameWindowMiddleMan
 		gameGraphics.drawString("@whi@Middle+Drag - Pan", rightAlign, 60, 0, 0);
 		gameGraphics.drawString("@whi@Right+Drag - Rotate", rightAlign, 70, 0, 0);
 		gameGraphics.drawString("@whi@Arrow Keys - Zoom/Tilt", rightAlign, 80, 0, 0);
+		gameGraphics.drawString("@whi@S - Toggle Shadows " + (shadowsEnabled ? "ON" : "OFF"), rightAlign, 90, 0, 0);
 		gameGraphics.drawImage( aGraphics936, 0, 0 );
 	}
 
@@ -1471,17 +1543,50 @@ public final class mudclient extends GameWindowMiddleMan
 		if (super.keyDown == 'h' || super.keyDown == 'H')
 		{
 			activeTool = (activeTool == 1) ? 0 : 1;
-			editMode = activeTool; // Auto-manage edit mode
+			editMode = (activeTool > 0) ? 1 : 0; // Auto-manage edit mode
+		}
+		else if (super.keyDown == 'j' || super.keyDown == 'J')
+		{
+			activeTool = (activeTool == 2) ? 0 : 2; // Texture tool
+			editMode = (activeTool > 0) ? 1 : 0;
+		}
+		else if (super.keyDown == 'k' || super.keyDown == 'K')
+		{
+			activeTool = (activeTool == 3) ? 0 : 3; // Overlay tool
+			editMode = (activeTool > 0) ? 1 : 0;
 			super.keyDown = 0; // Clear key to prevent repeat
 		}
-		else if (activeTool == 1)
+		
+		// Handle cursor and camera for all tools after activation
+		if (activeTool == 1)
 		{
-			if (super.keyDown == 'r' || super.keyDown == 'R')
+			// Store current terrain-relative height as fixed height for height tool
+			int l5 = lastAutoCameraRotatePlayerX + screenRotationX;
+			int i8 = lastAutoCameraRotatePlayerY + screenRotationY;
+			fixedCameraHeight = -engineHandle.getAveragedElevation( l5, i8 );
+		}
+		
+		if (activeTool > 0)
+		{
+			// Create invisible cursor for all tools
+			int[] pixels = new int[16 * 16];
+			Image image = createImage(new java.awt.image.MemoryImageSource(16, 16, pixels, 0, 16));
+			Cursor invisibleCursor = getToolkit().createCustomCursor(image, new Point(0, 0), "invisible");
+			setCursor(invisibleCursor);
+		}
+		else
+		{
+			setCursor(Cursor.getDefaultCursor());
+		}
+		
+		if (activeTool == 1) // Height tool controls
+		{
+			if (super.keyDown == ']')
 			{
 				heightToolRadius = Math.min(10, heightToolRadius + 1);
 				super.keyDown = 0;
 			}
-			else if (super.keyDown == 'f' || super.keyDown == 'F')
+			else if (super.keyDown == '[')
 			{
 				heightToolRadius = Math.max(1, heightToolRadius - 1);
 				super.keyDown = 0;
@@ -1507,6 +1612,68 @@ public final class mudclient extends GameWindowMiddleMan
 				super.keyDown = 0;
 			}
 		}
+		else if (activeTool == 2) // Texture tool controls
+		{
+			if (super.keyDown == ']')
+			{
+				textureToolRadius = Math.min(10, textureToolRadius + 1);
+				super.keyDown = 0;
+			}
+			else if (super.keyDown == '[')
+			{
+				textureToolRadius = Math.max(1, textureToolRadius - 1);
+				super.keyDown = 0;
+			}
+			else if (super.keyDown == 'y' || super.keyDown == 'Y')
+			{
+				textureToolSoftness = Math.min(1.0f, textureToolSoftness + 0.1f);
+				super.keyDown = 0;
+			}
+			else if (super.keyDown == 'u' || super.keyDown == 'U')
+			{
+				textureToolSoftness = Math.max(0.0f, textureToolSoftness - 0.1f);
+				super.keyDown = 0;
+			}
+			else if (super.keyDown == 'q' || super.keyDown == 'Q')
+			{
+				selectedTexture = Math.max(0, selectedTexture - 1);
+				super.keyDown = 0;
+			}
+			else if (super.keyDown == 'e' || super.keyDown == 'E')
+			{
+				selectedTexture = Math.min(255, selectedTexture + 1);
+				super.keyDown = 0;
+			}
+		}
+		else if (activeTool == 3) // Overlay tool controls
+		{
+			if (super.keyDown == 'q' || super.keyDown == 'Q')
+			{
+				selectedOverlay = Math.max(0, selectedOverlay - 1);
+				super.keyDown = 0;
+			}
+			else if (super.keyDown == 'e' || super.keyDown == 'E')
+			{
+				selectedOverlay = Math.min(255, selectedOverlay + 1);
+				super.keyDown = 0;
+			}
+		}
+		
+		// Global shortcuts
+		if (super.keyDown == 's' || super.keyDown == 'S')
+		{
+			shadowsEnabled = !shadowsEnabled;
+			engineHandle.shadowsEnabled = shadowsEnabled; // Pass flag to engine
+			updateRender(true); // Refresh rendering with new shadow setting
+			super.keyDown = 0;
+		}
+		else if (super.keyDown == 19) // Ctrl+S
+		{
+			System.out.println("Saving sectors...");
+			boolean success = saveSectors();
+			System.out.println("Save " + (success ? "successful" : "failed"));
+			super.keyDown = 0;
+		}
 	}
 
 	
@@ -1519,8 +1686,7 @@ public final class mudclient extends GameWindowMiddleMan
 			return;
 		}
 		
-		System.out.println("PAINTHEAD CALLED at " + centerX + ", " + centerY + " (raise: " + raise + ", radius: " + heightToolRadius + ", strength: " + heightToolStrength + ")");
-		Thread.dumpStack(); // Show the call stack to see what's calling this
+		System.out.println("Height tool: " + (raise ? "raising" : "lowering") + " at " + centerX + ", " + centerY);
 		
 		int strength = raise ? heightToolStrength : -heightToolStrength;
 		
@@ -1575,8 +1741,160 @@ public final class mudclient extends GameWindowMiddleMan
 				}
 			}
 		}
+		// Always update terrain geometry, shadow disable needs to be handled in EngineHandle
 		updateRender(true);
 		isModified = true;
+	}
+	
+	// Texture painting tool
+	private void paintTexture(int centerX, int centerY)
+	{
+		if (!sectionLoaded)
+		{
+			System.out.println("Cannot paint texture: section not loaded");
+			return;
+		}
+		
+		System.out.println("Texture tool: painting texture " + selectedTexture + " at " + centerX + ", " + centerY);
+		
+		for (int dx = -textureToolRadius; dx <= textureToolRadius; dx++)
+		{
+			for (int dy = -textureToolRadius; dy <= textureToolRadius; dy++)
+			{
+				int x = centerX + dx;
+				int y = centerY + dy;
+				
+				// Check bounds
+				if (x >= 0 && x < 96 && y >= 0 && y < 96)
+				{
+					float distance = (float)Math.sqrt(dx * dx + dy * dy);
+					if (distance <= textureToolRadius)
+					{
+						// Calculate falloff based on distance and softness
+						float falloff = 1.0f;
+						if (distance > textureToolRadius * textureToolSoftness)
+						{
+							falloff = 1.0f - ((distance - textureToolRadius * textureToolSoftness) / 
+											 (textureToolRadius * (1.0f - textureToolSoftness)));
+							falloff = Math.max(0.0f, falloff);
+						}
+						
+						// Only apply texture if falloff is significant
+						if (falloff > 0.1f)
+						{
+							Tile tile = getTileAtPos(x, y);
+							if (tile != null)
+							{
+								tile.groundTexture = (byte)selectedTexture;
+								
+								// Update the sector
+								byte sectorIndex = 0;
+								int sectorX = x, sectorY = y;
+								
+								if (x >= 48 && y < 48)
+								{
+									sectorIndex = 1;
+									sectorX -= 48;
+								}
+								else if (x < 48 && y >= 48)
+								{
+									sectorIndex = 2;
+									sectorY -= 48;
+								}
+								else if (x >= 48 && y >= 48)
+								{
+									sectorIndex = 3;
+									sectorX -= 48;
+									sectorY -= 48;
+								}
+								
+								engineHandle.sectors[sectorIndex].setTile(sectorX, sectorY, tile);
+							}
+						}
+					}
+				}
+			}
+		}
+		updateRender(true);
+		isModified = true;
+	}
+	
+	// Overlay painting tool - single tile only
+	private void paintOverlay(int centerX, int centerY)
+	{
+		if (!sectionLoaded)
+		{
+			System.out.println("Cannot paint overlay: section not loaded");
+			return;
+		}
+		
+		System.out.println("Overlay tool: painting overlay " + selectedOverlay + " at " + centerX + ", " + centerY);
+		
+		// Only paint the center tile (no radius or softness)
+		if (centerX >= 0 && centerX < 96 && centerY >= 0 && centerY < 96)
+		{
+			Tile tile = getTileAtPos(centerX, centerY);
+			if (tile != null)
+			{
+				tile.groundOverlay = (byte)selectedOverlay;
+				
+				// Update the sector
+				byte sectorIndex = 0;
+				int sectorX = centerX, sectorY = centerY;
+				
+				if (centerX >= 48 && centerY < 48)
+				{
+					sectorIndex = 1;
+					sectorX -= 48;
+				}
+				else if (centerX < 48 && centerY >= 48)
+				{
+					sectorIndex = 2;
+					sectorY -= 48;
+				}
+				else if (centerX >= 48 && centerY >= 48)
+				{
+					sectorIndex = 3;
+					sectorX -= 48;
+					sectorY -= 48;
+				}
+				
+				engineHandle.sectors[sectorIndex].setTile(sectorX, sectorY, tile);
+			}
+		}
+		updateRender(true);
+		isModified = true;
+	}
+	
+	private void drawToolPreview()
+	{
+		int mouseX = currentMouseX;
+		int mouseY = currentMouseY;
+		
+		if (activeTool == 1) // Height tool
+		{
+			int radiusPixels = heightToolRadius * 8;
+			gameGraphics.method212(mouseX, mouseY, radiusPixels, 0, 0xff0000); // Red circle
+			
+			if (heightToolSoftness < 1.0f)
+			{
+				int softRadiusPixels = (int)(radiusPixels * heightToolSoftness);
+				gameGraphics.method212(mouseX, mouseY, softRadiusPixels, 0, 0xffff00); // Yellow soft area
+			}
+		}
+		else if (activeTool == 2) // Texture tool
+		{
+			int radiusPixels = textureToolRadius * 8;
+			gameGraphics.method212(mouseX, mouseY, radiusPixels, 0, 0x00ff00); // Green circle
+		}
+		else if (activeTool == 3) // Overlay tool
+		{
+			int radiusPixels = 8; // Single tile only (radius = 1)
+			gameGraphics.method212(mouseX, mouseY, radiusPixels, 0, 0x0000ff); // Blue circle
+		}
+		
+		// Draw center point for all tools
+		gameGraphics.drawBox(mouseX - 2, mouseY - 2, 4, 4, 0xffffff); // White center dot
 	}
 	
 	/**Move the loaded section in a cardinal direction;

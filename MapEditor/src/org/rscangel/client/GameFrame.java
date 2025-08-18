@@ -249,7 +249,9 @@ public class GameFrame extends Frame implements ActionListener
 
 			case FILE_SAVE:
 				// save sectors
-				client.saveSectors();
+				System.out.println("Menu save triggered...");
+				boolean success = client.saveSectors();
+				System.out.println("Menu save " + (success ? "successful" : "failed"));
 				break;
 				
 			case EDITOR_RELOAD:

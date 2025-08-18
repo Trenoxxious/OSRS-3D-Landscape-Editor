@@ -15,6 +15,8 @@ import java.io.BufferedInputStream;
 
 public class EngineHandle
 {
+	// Rendering options
+	public boolean shadowsEnabled = true;
 	// -------------------------------------------------------------------------------------------------------------------
 	public int getStepCount( int walkSectionX, int walkSectionY, int x1,
 			int y1, int x2, int y2, int[] walkSectionXArray,
@@ -1494,6 +1496,12 @@ public class EngineHandle
 
 	public void method413( int i, int j, int k, int l, int i1 )
 	{
+		// Skip shadow rendering if disabled
+		if (!shadowsEnabled)
+		{
+			return;
+		}
+		
 		int j1 = i * 3;
 		int k1 = j * 3;
 		int l1 = camera.method302( l );
