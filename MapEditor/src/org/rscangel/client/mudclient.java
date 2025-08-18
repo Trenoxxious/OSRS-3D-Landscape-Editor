@@ -150,9 +150,35 @@ public final class mudclient extends GameWindowMiddleMan
 	private boolean shadowsEnabled = true;
 	private boolean lockCameraHeight = false;
 	private int fixedCameraHeight = -200; // Fixed camera height when locked
+	
+	// Undo system
+	private java.util.List<UndoAction> undoHistory = new java.util.ArrayList<UndoAction>();
+	private static final int MAX_UNDO_ACTIONS = 5;
 	private long lastDragEndTime = 0; // Time when last drag ended
 
 	private SectionsConfig config = new SectionsConfig( "recent" );
+	
+	// Inner class for undo actions
+	private static class UndoAction
+	{
+		public int x, y;
+		public byte oldGroundElevation, oldGroundTexture, oldGroundOverlay;
+		public byte newGroundElevation, newGroundTexture, newGroundOverlay;
+		public String actionType;
+		
+		public UndoAction(int x, int y, Tile oldTile, Tile newTile, String actionType)
+		{
+			this.x = x;
+			this.y = y;
+			this.oldGroundElevation = oldTile.groundElevation;
+			this.oldGroundTexture = oldTile.groundTexture;
+			this.oldGroundOverlay = oldTile.groundOverlay;
+			this.newGroundElevation = newTile.groundElevation;
+			this.newGroundTexture = newTile.groundTexture;
+			this.newGroundOverlay = newTile.groundOverlay;
+			this.actionType = actionType;
+		}
+	}
 
 	// -------------------------------------------------------------------------------------------------------------------
 	private mudclient()
@@ -1503,7 +1529,7 @@ public final class mudclient extends GameWindowMiddleMan
 
 		return super.createImage( i, j );
 	}
-
+	
 	// -------------------------------------------------------------------------------------------------------------------
 	public boolean saveSectors()
 	{
@@ -1535,6 +1561,66 @@ public final class mudclient extends GameWindowMiddleMan
 		int ba = byteAngle % 255;
 		float angle = ((ba / 256f) * 360);
 		return angle;
+	}
+	
+	// Undo system methods
+	private void addUndoAction(UndoAction action)
+	{
+		undoHistory.add(0, action); // Add to front of list
+		
+		// Keep only the last MAX_UNDO_ACTIONS
+		while (undoHistory.size() > MAX_UNDO_ACTIONS)
+		{
+			undoHistory.remove(undoHistory.size() - 1);
+		}
+		
+		System.out.println("Added undo action: " + action.actionType + " at " + action.x + "," + action.y);
+	}
+	
+	private void performUndo()
+	{
+		if (undoHistory.isEmpty())
+		{
+			System.out.println("No actions to undo");
+			return;
+		}
+		
+		UndoAction action = undoHistory.remove(0);
+		System.out.println("Undoing " + action.actionType + " action at " + action.x + "," + action.y);
+		
+		Tile tile = getTileAtPos(action.x, action.y);
+		if (tile != null)
+		{
+			// Restore original values
+			tile.groundElevation = action.oldGroundElevation;
+			tile.groundTexture = action.oldGroundTexture;
+			tile.groundOverlay = action.oldGroundOverlay;
+			
+			// Update the sector
+			byte sectorIndex = 0;
+			int sectorX = action.x, sectorY = action.y;
+			
+			if (action.x >= 48 && action.y < 48)
+			{
+				sectorIndex = 1;
+				sectorX -= 48;
+			}
+			else if (action.x < 48 && action.y >= 48)
+			{
+				sectorIndex = 2;
+				sectorY -= 48;
+			}
+			else if (action.x >= 48 && action.y >= 48)
+			{
+				sectorIndex = 3;
+				sectorX -= 48;
+				sectorY -= 48;
+			}
+			
+			engineHandle.sectors[sectorIndex].setTile(sectorX, sectorY, tile);
+			updateRender(true);
+			isModified = true;
+		}
 	}
 	
 	// Handle tool shortcuts based on key state
@@ -1674,6 +1760,11 @@ public final class mudclient extends GameWindowMiddleMan
 			System.out.println("Save " + (success ? "successful" : "failed"));
 			super.keyDown = 0;
 		}
+		else if (super.keyDown == 26) // Ctrl+Z
+		{
+			performUndo();
+			super.keyDown = 0;
+		}
 	}
 
 	
@@ -1779,13 +1870,36 @@ public final class mudclient extends GameWindowMiddleMan
 							falloff = Math.max(0.0f, falloff);
 						}
 						
-						// Only apply texture if falloff is significant
-						if (falloff > 0.1f)
+						// Apply texture blending based on falloff
+						Tile tile = getTileAtPos(x, y);
+						if (tile != null)
 						{
-							Tile tile = getTileAtPos(x, y);
-							if (tile != null)
+							// Store original for undo
+							Tile originalTile = new Tile();
+							originalTile.groundElevation = tile.groundElevation;
+							originalTile.groundTexture = tile.groundTexture;
+							originalTile.groundOverlay = tile.groundOverlay;
+							
+							// Blend texture based on falloff strength
+							if (falloff > 0.9f)
 							{
+								// Full strength - set to selected texture
 								tile.groundTexture = (byte)selectedTexture;
+							}
+							else if (falloff > 0.3f)
+							{
+								// Medium strength - blend with current texture
+								int currentTexture = tile.groundTexture & 0xFF;
+								int blendedTexture = (int)(currentTexture * (1.0f - falloff) + selectedTexture * falloff);
+								tile.groundTexture = (byte)blendedTexture;
+							}
+							// Low falloff - don't change texture
+							
+							if (tile.groundTexture != originalTile.groundTexture)
+							{
+								// Store undo action
+								UndoAction action = new UndoAction(x, y, originalTile, tile, "texture");
+								addUndoAction(action);
 								
 								// Update the sector
 								byte sectorIndex = 0;
