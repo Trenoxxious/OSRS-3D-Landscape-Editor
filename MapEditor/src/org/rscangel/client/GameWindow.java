@@ -2,10 +2,12 @@ package org.rscangel.client;
 
 import java.applet.Applet;
 import java.awt.*;
+import java.awt.event.MouseWheelEvent;
+import java.awt.event.MouseWheelListener;
 import java.io.DataInputStream;
 import java.io.IOException;
 
-public class GameWindow extends Applet implements Runnable
+public class GameWindow extends Applet implements Runnable, MouseWheelListener
 {
 	private static final long serialVersionUID = 7526472295622776147L;
 
@@ -40,6 +42,7 @@ public class GameWindow extends Applet implements Runnable
 			boolean resizable )
 	{
 		gameFrame = new GameFrame( this, width, height, title, resizable, false );
+		addMouseWheelListener(this); // Register mouse wheel listener
 		loadingScreen = 1;
 		gameWindowThread = new Thread( this );
 		gameWindowThread.start();
@@ -667,5 +670,18 @@ public class GameWindow extends Applet implements Runnable
 	public String enteredText;
 	public String inputMessage;
 	public String enteredMessage;
+        
+        // Mouse wheel event handling
+        public void mouseWheelMoved(MouseWheelEvent e)
+        {
+        	// Delegate to subclass
+        	handleMouseWheel(e.getWheelRotation());
+        }
+        
+        // Override this in subclasses
+        protected void handleMouseWheel(int wheelRotation)
+        {
+        	// Default implementation does nothing
+        }
 
 }
