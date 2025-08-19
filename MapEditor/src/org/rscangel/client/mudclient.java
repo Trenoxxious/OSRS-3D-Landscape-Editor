@@ -6,6 +6,9 @@ import org.rscangel.client.model.Sprite;
 import org.rscangel.client.model.Tile;
 import org.rscangel.client.util.Config;
 
+import java.awt.event.MouseWheelEvent;
+import java.awt.event.MouseWheelListener;
+
 import java.awt.*;
 import java.io.*;
 import java.awt.image.BufferedImage;
@@ -569,12 +572,17 @@ public final class mudclient extends GameWindowMiddleMan {
     // mouse wheel handler for zooming
     // -------------------------------------------------------------------------------------------------------------------
     protected void handleMouseWheel(int wheelRotation) {
-        // Zoom in/out by adjusting camera height
+        // Make mouse wheel work exactly like up/down arrow keys
         // Positive rotation = scroll down = zoom out (increase camera height)
         // Negative rotation = scroll up = zoom in (decrease camera height)
         int zoomStep = 10;
         cameraHeight += wheelRotation * zoomStep;
-        cameraHeight = Math.max(50, Math.min(500, cameraHeight)); // Clamp zoom range
+
+        if (cameraHeight < 100)
+            cameraHeight = 100;
+        if (cameraHeight > 10000)
+            cameraHeight = 10000;
+
         System.out.println("Mouse wheel zoom: " + (wheelRotation > 0 ? "out" : "in")
                 + ", camera height: " + cameraHeight);
     }
